@@ -1,0 +1,297 @@
+import { useState, useEffect } from 'react';
+import {
+  User,
+  Pencil,
+  Copy,
+  Trash2,
+  Check,
+  X,
+  Volume2,
+  RefreshCw,
+} from 'lucide-react';
+import { DeleteModal } from '../../User_Interface/Header/DeleteModal';
+import { Message } from '../Utilities';
+
+interface ChatMessageProps {
+  message: Message;
+  isDarkMode?: boolean;
+  onEdit?: (id: string, newContent: string) => void;
+  onDelete?: (id: string) => void;
+  onCopy?: () => void;
+  onSend?: (content: string) => void;
+  onRegenerate?: (id: string, content: string) => void;
+}
+
+export function ChatMessage({
+  message,
+  isDarkMode = true,
+  onEdit,
+  onDelete,
+  onCopy,
+  onSend,
+  onRegenerate,
+}: ChatMessageProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(message.content);
+  const [showActions, setShowActions] = useState(false);
+  const [isReading, setIsReading] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const isUser = message.role === 'user';
+
+  useEffect(() => {
+    if (!isUser && message.content) {
+      setIsTyping(true);
+      setDisplayedContent('');
+      
+      let timeoutId: NodeJS.Timeout;
+      
+      // Add a small delay before starting the typing effect
+      timeoutId = setTimeout(() => {
+        const chars = message.content.split('');
+        let currentIndex = 0;
+        let content = '';
+
+        const typingInterval = setInterval(() => {
+          if (currentIndex < chars.length) {
+            content += chars[currentIndex];
+            setDisplayedContent(content);
+            currentIndex++;
+          } else {
+            clearInterval(typingInterval);
+            setIsTyping(false);
+          }
+        }, 5);
+
+        return () => {
+          clearInterval(typingInterval);
+          clearTimeout(timeoutId);
+        };
+      }, 100); // Small delay before starting
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setDisplayedContent(message.content);
+      setIsTyping(false);
+    }
+  }, [message.content, isUser]);
+
+  const handleEdit = () => {
+    if (onSend) {
+      onSend(editedContent);
+      setIsEditing(false);
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content);
+    if (onCopy) onCopy();
+  };
+
+  const handleDelete = () => {
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleRegenerate = () => {
+    if (onRegenerate) {
+      onRegenerate(message.id, message.content);
+    }
+  };
+
+  const handleReadAloud = () => {
+    if (isReading) {
+      window.speechSynthesis.cancel();
+      setIsReading(false);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    utterance.onend = () => setIsReading(false);
+    setIsReading(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  return (
+    <div
+      className={`group flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+      <div
+        className={`flex h-8 w-8 shrink-0 select-none items-center justify-center ${
+          isUser
+            ? `rounded-full ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`
+            : 'bg-transparent'
+        }`}
+      >
+        {isUser ? (
+          <User
+            className={
+              isDarkMode ? 'h-5 w-5 text-gray-200' : 'h-5 w-5 text-gray-600'
+            }
+          />
+        ) : (
+          <div className="relative">
+            <img
+              src={
+                isDarkMode
+                  ? 'https://43605540.fs1.hubspotusercontent-na1.net/hubfs/43605540/PENTOS/Logos/Web%20Optimized/Emblem%20Only/Pentos%20Emblem%20(White).png'
+                  : 'https://43605540.fs1.hubspotusercontent-na1.net/hubfs/43605540/PENTOS/Logos/Web%20Optimized/Emblem%20Only/Pentos%20Emblem%20(Black).png'
+              }
+              alt="Pentos Logo"
+              className="relative h-8 w-8 object-contain"
+            />
+          </div>
+        )}
+      </div>
+
+      <div
+        className={`relative inline-block max-w-[calc(80%-2rem)] rounded-lg px-2 py-2 transition-all duration-300 ${
+          isUser
+            ? `${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} ${
+                isDarkMode ? 'text-gray-100' : 'text-gray-900'
+              }`
+            : `bg-gray-500 text-white`
+        }`}
+      >
+        {isEditing ? (
+          <div className="flex w-full flex-col gap-2">
+            <textarea
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              className={`min-h-[150px] w-full rounded-lg border p-2 ${
+                isDarkMode
+                  ? 'border-gray-700 bg-gray-900 text-white'
+                  : 'border-gray-300 bg-gray-100 text-gray-900'
+              } focus:outline-none`}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setEditedContent(message.content);
+                  setIsEditing(false);
+                }}
+                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-white transition-all duration-100 hover:border-1 hover:border-white ${
+                  isDarkMode
+                    ? 'bg-gray-800 hover:bg-gray-900'
+                    : 'bg-gray-400 hover:bg-gray-500'
+                }`}
+              >
+                <X className="h-4 w-4" />
+                Cancel
+              </button>
+              <button
+                onClick={handleEdit}
+                className={`flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-white transition-all duration-100 hover:border-1 hover:border-white ${
+                  isDarkMode
+                    ? 'bg-gray-800 hover:bg-gray-900'
+                    : 'bg-gray-500 hover:bg-gray-600'
+                }`}
+              >
+                <Check className="h-4 w-4" />
+                Send
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="whitespace-pre-wrap break-words">
+              {displayedContent}
+              {isTyping && (
+                <span className="inline-flex animate-pulse">▊</span>
+              )}
+            </p>
+            {showActions && (
+              <div
+                className={`absolute ${
+                  isUser ? 'right-full' : 'left-full'
+                } top-1/2 flex -translate-y-1/2 gap-1 px-2`}
+              >
+                <button
+                  onClick={() => {
+                    setEditedContent(message.content);
+                    setIsEditing(true);
+                  }}
+                  className={`rounded-full p-1 transition-colors ${
+                    isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-300'
+                  }`}
+                >
+                  <Pencil
+                    className={`h-4 w-4 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}
+                  />
+                </button>
+                <button
+                  onClick={handleCopy}
+                  className={`rounded-full p-1 transition-colors ${
+                    isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-300'
+                  }`}
+                >
+                  <Copy
+                    className={`h-4 w-4 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}
+                  />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className={`rounded-full p-1 transition-colors ${
+                    isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-300'
+                  }`}
+                >
+                  <Trash2
+                    className={`h-4 w-4 ${
+                      isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    }`}
+                  />
+                </button>
+                {!isUser && (
+                  <>
+                    <button
+                      onClick={handleReadAloud}
+                      className={`rounded-full p-1 transition-colors ${
+                        isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-300'
+                      } ${isReading ? 'text-black' : ''}`}
+                    >
+                      <Volume2
+                        className={`h-4 w-4 ${
+                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                        }`}
+                      />
+                    </button>
+                    <button
+                      onClick={handleRegenerate}
+                      className={`rounded-full p-1 transition-colors ${
+                        isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-300'
+                      }`}
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 ${
+                          isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                        }`}
+                      />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <DeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={() => {
+          if (onDelete) {
+            onDelete(message.id);
+          }
+          setIsDeleteModalOpen(false);
+        }}
+        isDarkMode={isDarkMode}
+      />
+    </div>
+  );
+}
