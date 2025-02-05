@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 3px;
+}
+
+/* Prevent text selection during sidebar resize */
+.resize-active {
+  user-select: none !important;
+  cursor: col-resize !important;
+}
+
+.resize-active * {
+  user-select: none !important;
+  pointer-events: none !important;
+}
+
+/* Smooth sidebar transitions */
+.sidebar-transition {
+  transition: width 150ms ease-in-out;
+}
+
+.sidebar-resize {
+  transition: none;
+}
