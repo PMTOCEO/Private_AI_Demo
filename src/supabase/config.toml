@@ -1,0 +1,4 @@
+[auth.third_party.auth0]
+enabled = true
+tenant = "pentos"
+tenant_region = "us"

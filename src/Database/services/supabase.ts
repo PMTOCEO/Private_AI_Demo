@@ -1,22 +1,39 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '../../Database/lib/database.types';
+import type { Database } from '../lib/database.types';
 
-// Validate environment variables at startup
+// Validate environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing required Supabase environment variables');
+if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+  throw new Error('Missing Supabase environment variables');
 }
 
-// Single source of truth for Supabase client
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+// Create client instances
+export const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
-    persistSession: true,
+    persistSession: false,
     detectSessionInUrl: false
   }
 });
 
-// Re-export for convenience
-export type { Database } from '../../Database/lib/database.types';
+// Update auth header
+export const setSupabaseToken = async (token: string) => {
+  const { data: { session }, error } = await supabase.auth.setSession({
+    access_token: token,
+    refresh_token: token
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return session;
+};
+
+// Clear auth header
+export const clearSupabaseToken = async () => {
+  await supabase.auth.signOut();
+};

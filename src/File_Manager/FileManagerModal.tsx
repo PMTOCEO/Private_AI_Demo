@@ -5,7 +5,7 @@ import { SearchProvider } from './context/SearchContext.tsx';
 import { FilesSidebar } from './components/FilesSidebar.tsx';
 import { FilesMainContent } from './components/FilesMainContent.tsx';
 import { useFiles } from './hooks/useFiles.ts';
-import { useAuth0 } from '@auth0/auth0-react';
+import { useAuth } from '../Authentication/context/AuthContext';
 import type { FileItem } from './types/file.ts';
 
 interface FileManagerModalProps {
@@ -17,15 +17,34 @@ interface FileManagerModalProps {
 function FileManagerContent() {
   const { getFiles } = useFiles();
   const [files, setFiles] = useState<FileItem[]>([]);
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
     const loadFiles = async () => {
+      if (!isAuthenticated) return;
       const userFiles = await getFiles();
       setFiles(userFiles || []);
     };
+
     loadFiles();
-  }, [getFiles]);
+  }, [getFiles, isAuthenticated]);
   
+  if (isLoading) {
+    return (
+      <div className="flex w-full items-center justify-center">
+        <p className="text-lg text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex w-full items-center justify-center">
+        <p className="text-lg text-gray-500">Please sign in to access files</p>
+      </div>
+    );
+  }
+
   return (
     <SearchProvider files={files}>
       <div className="flex h-full w-full">
@@ -37,8 +56,6 @@ function FileManagerContent() {
 }
 
 export function FileManagerModal({ isOpen, onClose, isDarkMode }: FileManagerModalProps) {
-  const { isAuthenticated } = useAuth0();
-
   if (!isOpen) return null;
 
   return (
@@ -55,17 +72,9 @@ export function FileManagerModal({ isOpen, onClose, isDarkMode }: FileManagerMod
           <X className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} />
         </button>
 
-        {isAuthenticated ? (
-          <FilesProvider>
-            <FileManagerContent />
-          </FilesProvider>
-        ) : (
-          <div className="flex w-full items-center justify-center">
-            <p className={`text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Please sign in to access the file manager
-            </p>
-          </div>
-        )}
+        <FilesProvider>
+          <FileManagerContent />
+        </FilesProvider>
       </div>
     </div>
   );
