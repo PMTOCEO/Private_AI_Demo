@@ -24,6 +24,9 @@ import type { FileItem } from '../types/file';
 
 interface FilesTableProps {
   type: 'my-files' | 'shared';
+  files: FileItem[];
+  onFileUpdate: (fileId: string, updates: Partial<FileItem>) => Promise<void>;
+  onFileDelete: (fileId: string, storagePath: string) => Promise<void>;
 }
 
 export function FilesTable({ type }: FilesTableProps) {
@@ -167,6 +170,7 @@ export function FilesTable({ type }: FilesTableProps) {
                 onEditingNameChange={setEditingName}
                 onEditComplete={handleEditComplete}
                 onStartRename={() => handleStartRename(file.id)}
+                onDelete={() => dispatch({ type: 'DELETE_FILE', payload: file.id })}
               />
             ))}
           </SortableContext>

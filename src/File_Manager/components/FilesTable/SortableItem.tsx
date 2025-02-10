@@ -15,6 +15,7 @@ interface SortableItemProps {
   onEditingNameChange: (value: string) => void;
   onEditComplete: () => void;
   onStartRename: () => void;
+  onDelete: () => void;
 }
 
 export const SortableItem = React.memo(({ 
@@ -26,7 +27,8 @@ export const SortableItem = React.memo(({
   editingName,
   onEditingNameChange,
   onEditComplete,
-  onStartRename
+  onStartRename,
+  onDelete
 }: SortableItemProps) => {
   const {
     attributes,
@@ -78,7 +80,10 @@ export const SortableItem = React.memo(({
         transition-colors duration-200`}
     >
       <div onClick={(e) => e.stopPropagation()}>
-        <FileContextMenu file={file} onRename={onStartRename} />
+        <FileContextMenu 
+          file={file} 
+          onRename={onStartRename}
+        />
       </div>
       <div 
         className="text-gray-400 dark:text-gray-500"

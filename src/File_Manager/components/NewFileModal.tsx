@@ -8,10 +8,11 @@ import type { FileItem } from '../types/file';
 
 interface NewFileModalProps {
   onClose: () => void;
+  onUpload: (file: File, description?: string) => Promise<void>;
 }
 
-export function NewFileModal({ onClose }: NewFileModalProps) {
-  const { state, dispatch } = useFiles();
+export function NewFileModal({ onClose, onUpload }: NewFileModalProps) {
+  const { state } = useFiles();
   const [fileName, setFileName] = React.useState('');
   const [description, setDescription] = React.useState('');
 
@@ -26,30 +27,16 @@ export function NewFileModal({ onClose }: NewFileModalProps) {
     }
   }, [selectedFile]);
 
-  const handleSave = () => {
-    if (!fileName.trim()) return;
+  const handleSave = async () => {
+    if (!fileName.trim() || !selectedFile) return;
 
-    const newFile = {
-      id: crypto.randomUUID(),
-      name: fileName,
-      size: selectedFile ? `${(selectedFile.size / 1024).toFixed(2)} KB` : '0 KB',
-      permissions: 'Read/Write',
-      createdDate: new Date().toLocaleString(),
-      lastModified: null,
-      owner: 'You',
-      type: 'file' as const,
-      fileType: fileType || {
-        mimeType: 'text/plain',
-        extension: 'txt',
-        displayName: 'Text File'
-      },
-      description,
-      dataUrl: previewUrl || undefined,
-      parentId: state.currentFolder
-    };
-
-    dispatch({ type: 'ADD_FILE', payload: newFile });
-    onClose();
+    try {
+      await onUpload(selectedFile, description);
+      onClose();
+    } catch (error) {
+      console.error('Error saving file:', error);
+      // TODO: Add error notification
+    }
   };
 
   // Create a placeholder FileItem when no file is selected
@@ -66,7 +53,8 @@ export function NewFileModal({ onClose }: NewFileModalProps) {
       mimeType: 'text/plain',
       extension: 'txt',
       displayName: 'Text File'
-    }
+    },
+    storagePath: ''
   };
 
   return (
@@ -98,15 +86,6 @@ export function NewFileModal({ onClose }: NewFileModalProps) {
             />
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200 dark:border-gray-800"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white dark:bg-gray-900 text-gray-500">or create a new file</span>
-            </div>
-          </div>
-
           <FileForm
             fileName={fileName}
             description={description}
@@ -126,9 +105,9 @@ export function NewFileModal({ onClose }: NewFileModalProps) {
           </button>
           <button
             onClick={handleSave}
-            disabled={!fileName.trim()}
+            disabled={!fileName.trim() || !selectedFile}
             className={`px-4 py-2 rounded-md transition-colors duration-200 ${
-              fileName.trim()
+              fileName.trim() && selectedFile
                 ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100'
                 : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
             }`}

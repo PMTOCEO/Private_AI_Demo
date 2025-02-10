@@ -4,7 +4,7 @@ import type { FileItem } from '../../types/file';
 import { FileUploadBox } from './FileUploadBox';
 
 interface FilePreviewProps {
-  file: File | FileItem;
+  file: File | FileItem | null;
   previewUrl: string | null;
   isProcessing?: boolean;
   onReplace: () => void;
@@ -19,15 +19,21 @@ export function FilePreview({
   const [isHovered, setIsHovered] = React.useState(false);
   
   // Type guard to check if file is FileItem or File
-  const isFileItem = (file: File | FileItem): file is FileItem => {
-    return 'fileType' in file;
+  const isFileItem = (file: File | FileItem | null): file is FileItem => {
+    return file !== null && 'fileType' in file;
   };
 
-  const isImage = isFileItem(file) 
-    ? file.fileType?.mimeType.startsWith('image/') 
-    : file.type.startsWith('image/');
+  const isImage = file 
+    ? isFileItem(file)
+      ? file.fileType?.mimeType.startsWith('image/') 
+      : file.type.startsWith('image/')
+    : false;
     
-  const fileName = isFileItem(file) ? file.name : file.name;
+  const fileName = file 
+    ? isFileItem(file) 
+      ? file.name 
+      : file.name
+    : 'No file selected';
 
   if (!previewUrl) {
     return <FileUploadBox onClick={onReplace} />;

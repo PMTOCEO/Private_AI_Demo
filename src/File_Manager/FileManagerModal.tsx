@@ -4,7 +4,7 @@ import { FilesProvider } from './context/FilesContext.tsx';
 import { SearchProvider } from './context/SearchContext.tsx';
 import { FilesSidebar } from './components/FilesSidebar.tsx';
 import { FilesMainContent } from './components/FilesMainContent.tsx';
-import { useFiles } from './hooks/useFiles.ts';
+import { useFiles } from './hooks/useFiles';
 import { useAuth } from '../Authentication/context/AuthContext';
 import type { FileItem } from './types/file.ts';
 
@@ -15,21 +15,66 @@ interface FileManagerModalProps {
 }
 
 function FileManagerContent() {
-  const { getFiles } = useFiles();
+  const { getFiles, uploadFile, updateFile, deleteFile } = useFiles();
   const [files, setFiles] = useState<FileItem[]>([]);
-  const { isAuthenticated, isLoading } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     const loadFiles = async () => {
-      if (!isAuthenticated) return;
-      const userFiles = await getFiles();
-      setFiles(userFiles || []);
+      if (!isAuthenticated) {
+        setFiles([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        setIsLoading(true);
+        const userFiles = await getFiles();
+        setFiles(userFiles || []);
+      } catch (error) {
+        console.error('Error loading files:', error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     loadFiles();
   }, [getFiles, isAuthenticated]);
+
+  const handleFileUpload = async (file: File, description?: string): Promise<void> => {
+    try {
+      const newFile = await uploadFile(file, description);
+      setFiles(prev => [newFile, ...prev]);
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      throw error;
+    }
+  };
+
+  const handleFileUpdate = async (fileId: string, updates: Partial<FileItem>) => {
+    try {
+      await updateFile(fileId, updates);
+      setFiles(prev => prev.map(file => 
+        file.id === fileId ? { ...file, ...updates } : file
+      ));
+    } catch (error) {
+      console.error('Error updating file:', error);
+      throw error;
+    }
+  };
+
+  const handleFileDelete = async (fileId: string, storagePath: string) => {
+    try {
+      await deleteFile(fileId, storagePath);
+      setFiles(prev => prev.filter(file => file.id !== fileId));
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      throw error;
+    }
+  };
   
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="flex w-full items-center justify-center">
         <p className="text-lg text-gray-500">Loading...</p>
@@ -46,12 +91,18 @@ function FileManagerContent() {
   }
 
   return (
-    <SearchProvider files={files}>
-      <div className="flex h-full w-full">
-        <FilesSidebar />
-        <FilesMainContent />
-      </div>
-    </SearchProvider>
+    <FilesProvider>
+      <SearchProvider files={files}>
+        <div className="flex h-full w-full">
+          <FilesSidebar onFileUpload={handleFileUpload} />
+          <FilesMainContent 
+            files={files}
+            onFileUpdate={handleFileUpdate}
+            onFileDelete={handleFileDelete}
+          />
+        </div>
+      </SearchProvider>
+    </FilesProvider>
   );
 }
 
@@ -72,9 +123,7 @@ export function FileManagerModal({ isOpen, onClose, isDarkMode }: FileManagerMod
           <X className={`h-5 w-5 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} />
         </button>
 
-        <FilesProvider>
-          <FileManagerContent />
-        </FilesProvider>
+        <FileManagerContent />
       </div>
     </div>
   );

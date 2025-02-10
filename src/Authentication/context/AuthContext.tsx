@@ -1,13 +1,12 @@
 import { createContext, useContext, ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { supabase, setSupabaseToken, clearSupabaseToken } from '../../Database/services/supabase';
-import { generateUserUuid } from '../utils/authUUID';
+import { jwtDecode } from 'jwt-decode';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: any;
-  userUuid: string | null;
   login: () => void;
   logout: () => void;
 }
@@ -17,30 +16,24 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { 
     isAuthenticated,
-    isLoading,
+    isLoading: auth0Loading,
     user,
     loginWithRedirect,
     logout: auth0Logout,
     getAccessTokenSilently
   } = useAuth0();
 
-  const [userUuid, setUserUuid] = useState<string | null>(null);
-  const [authInitialized, setAuthInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const initializeAuth = useCallback(async () => {
-    if (!isAuthenticated || !user?.sub) {
-      setUserUuid(null);
-      clearSupabaseToken();
-      setAuthInitialized(true);
+    if (!isAuthenticated || !user?.sub || auth0Loading) {
+      await clearSupabaseToken();
+      setIsLoading(false);
       return;
     }
 
     try {
-      // Generate UUID first
-      const uuid = await generateUserUuid(user.sub);
-      setUserUuid(uuid);
-
-      // Get Auth0 token
+      // Get Auth0 token which contains the Supabase token
       const token = await getAccessTokenSilently({
         authorizationParams: {
           audience: import.meta.env.VITE_AUTH0_AUDIENCE,
@@ -48,66 +41,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      // Set Supabase token
-      await setSupabaseToken(token);
+      // Decode token to get UUID from Auth0 trigger
+      const decoded = jwtDecode(token);
+      const uuid = decoded.sub as string;
 
-      // Create/update user with service role
-      const { error } = await supabase.auth.admin.createUser({
-        email: user.email,
-        email_confirm: true,
-        user_metadata: {
-          name: user.name,
-          auth0_id: user.sub,
-          uuid: uuid
-        }
-      });
+      // Check if user exists in Supabase
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', uuid)
+        .single();
 
-      if (error && error.message !== 'User already registered') {
-        throw error;
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw checkError;
       }
 
-      // Update user metadata
-      await supabase
-        .from('users')
-        .upsert({
-          id: uuid,
-          email: user.email,
-          name: user.name,
-          auth0_id: user.sub,
-          last_login: new Date().toISOString()
-        })
-        .match({ id: uuid });
+      // If user doesn't exist, create them
+      if (!existingUser) {
+        const { error: createError } = await supabase
+          .from('users')
+          .insert({
+            id: uuid,
+            email: user.email,
+            created_at: new Date().toISOString(),
+            last_login: new Date().toISOString()
+          });
+
+        if (createError) throw createError;
+      }
+
+      // Now set the Supabase session with the token from Auth0
+      await setSupabaseToken(token);
 
     } catch (error) {
       console.error('Auth initialization error:', error);
-      setUserUuid(null);
-      clearSupabaseToken();
+      await clearSupabaseToken();
     } finally {
-      setAuthInitialized(true);
+      setIsLoading(false);
     }
-  }, [isAuthenticated, user, getAccessTokenSilently]);
+  }, [isAuthenticated, user, auth0Loading, getAccessTokenSilently]);
 
   useEffect(() => {
-    if (!authInitialized) {
+    if (!auth0Loading) {
       initializeAuth();
     }
-  }, [authInitialized, initializeAuth]);
+  }, [auth0Loading, initializeAuth]);
 
   const logout = useCallback(async () => {
-    setUserUuid(null);
-    clearSupabaseToken();
+    await clearSupabaseToken();
     await auth0Logout({ logoutParams: { returnTo: window.location.origin } });
   }, [auth0Logout]);
 
-  if (!authInitialized) {
-    return null; // Or a loading spinner
-  }
-
   const value = {
     isAuthenticated,
-    isLoading,
+    isLoading: isLoading || auth0Loading,
     user,
-    userUuid,
     login: loginWithRedirect,
     logout
   };

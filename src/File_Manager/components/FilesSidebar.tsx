@@ -3,9 +3,23 @@ import { Upload, FilePlus, FolderPlus } from 'lucide-react';
 import { NewFileModal } from './NewFileModal';
 import { NewFolderModal } from './NewFolderModal';
 
-export function FilesSidebar() {
+interface FilesSidebarProps {
+  onFileUpload: (file: File, description?: string) => Promise<void>;
+}
+
+export function FilesSidebar({ onFileUpload }: FilesSidebarProps) {
   const [showNewFileModal, setShowNewFileModal] = React.useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = React.useState(false);
+
+  const handleFileUpload = async (file: File, description?: string) => {
+    try {
+      await onFileUpload(file, description);
+      setShowNewFileModal(false);
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      // Handle error (show notification, etc.)
+    }
+  };
 
   return (
     <div className="w-[240px] bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-8 pt-10 flex flex-col border-r border-gray-200 dark:border-gray-800">
@@ -46,7 +60,10 @@ export function FilesSidebar() {
       </div>
 
       {showNewFileModal && (
-        <NewFileModal onClose={() => setShowNewFileModal(false)} />
+        <NewFileModal 
+          onClose={() => setShowNewFileModal(false)} 
+          onUpload={handleFileUpload}
+        />
       )}
 
       {showNewFolderModal && (

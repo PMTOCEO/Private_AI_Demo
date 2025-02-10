@@ -28,6 +28,7 @@ export interface FileItem {
   dataUrl?: string;
   content?: string;
   children?: FileItem[];
+  storagePath: string; // Add this field for Supabase storage path
 }
 
 export interface FileState {

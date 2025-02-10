@@ -21,7 +21,8 @@ export function NewFolderModal({ onClose }: NewFolderModalProps) {
         createdDate: new Date().toLocaleString(),
         lastModified: null,
         owner: 'You',
-        type: 'folder' as const
+        type: 'folder' as const,
+        storagePath: ''
       };
       dispatch({ type: 'ADD_FOLDER', payload: newFolder });
       onClose();

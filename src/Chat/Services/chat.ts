@@ -1,4 +1,5 @@
 import { API_CONFIG } from './config';
+import { hathrService } from './HathrService';
 import type { ChatMessage, ChatRequest, ChatResponse } from '../Utilities/types';
 
 export async function sendChatRequest(token: string, messages: ChatMessage[]): Promise<ChatResponse> {
@@ -39,7 +40,7 @@ export async function sendChatRequest(token: string, messages: ChatMessage[]): P
 
     throw new Error('Invalid API response structure');
   } catch (error) {
-    console.error('Chat request error details:', error);
+    console.error('Chat request error:', error);
     throw error;
   }
 }

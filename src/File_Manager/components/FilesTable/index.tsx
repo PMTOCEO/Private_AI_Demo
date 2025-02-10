@@ -23,10 +23,12 @@ import type { FileItem } from '../../types/file';
 
 interface FilesTableProps {
   type: 'my-files' | 'shared';
+  files: FileItem[];
+  onFileUpdate: (fileId: string, updates: Partial<FileItem>) => Promise<void>;
+  onFileDelete: (fileId: string, storagePath: string) => Promise<void>;
 }
 
-export function FilesTable({ type }: FilesTableProps) {
-  const { state, dispatch } = useFiles();
+export function FilesTable({ type, files, onFileUpdate, onFileDelete }: FilesTableProps) {
   const { searchQuery, searchResults } = useSearch();
   const [selectedFile, setSelectedFile] = React.useState<FileItem | null>(null);
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -38,10 +40,10 @@ export function FilesTable({ type }: FilesTableProps) {
   // Use search results if there's a search query, otherwise use filtered files
   const displayedFiles = searchQuery
     ? searchResults
-    : state.files.filter(file => 
+    : files.filter(file => 
         type === 'my-files' 
-          ? !file.shared && file.parentId === state.currentFolder
-          : file.shared && file.parentId === state.currentFolder
+          ? !file.shared 
+          : file.shared
       );
 
   const sensors = useSensors(
@@ -82,29 +84,17 @@ export function FilesTable({ type }: FilesTableProps) {
     const overFile = displayedFiles.find(f => f.id === over.id);
     
     if (overFile?.type === 'folder' && active.id !== over.id) {
-      dispatch({
-        type: 'MOVE_FILE',
-        payload: {
-          fileId: active.id as string,
-          destinationFolderId: over.id as string
-        }
-      });
+      onFileUpdate(active.id as string, { parentId: over.id as string });
       return;
     }
 
     const newIndex = displayedFiles.findIndex(f => f.id === over.id);
-    dispatch({ 
-      type: 'REORDER_FILES', 
-      payload: {
-        fileId: active.id as string,
-        newIndex
-      }
-    });
+    onFileUpdate(active.id as string, { order: newIndex });
   };
 
   const handleItemClick = (file: FileItem) => {
     if (file.type === 'folder') {
-      dispatch({ type: 'SET_CURRENT_FOLDER', payload: file.id });
+      // Handle folder navigation if needed
     } else {
       setSelectedFile(file);
     }
@@ -120,13 +110,7 @@ export function FilesTable({ type }: FilesTableProps) {
 
   const handleEditComplete = () => {
     if (editingFileId && editingName.trim()) {
-      dispatch({
-        type: 'UPDATE_FILE',
-        payload: {
-          id: editingFileId,
-          updates: { name: editingName }
-        }
-      });
+      onFileUpdate(editingFileId, { name: editingName });
     }
     setEditingFileId(null);
     setEditingName('');
@@ -170,6 +154,7 @@ export function FilesTable({ type }: FilesTableProps) {
                   onEditingNameChange={setEditingName}
                   onEditComplete={handleEditComplete}
                   onStartRename={() => handleStartRename(file.id)}
+                  onDelete={() => onFileDelete(file.id, file.storagePath)}
                 />
               ))}
             </SortableContext>
