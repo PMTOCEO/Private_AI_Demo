@@ -3,6 +3,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  isNew?: boolean; // Add this field to track new messages
 }
 
 export interface Chat {

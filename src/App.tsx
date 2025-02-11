@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Chat } from './Chat/Utilities';
 import { ChatMessage } from './Chat/ChatInterface/ChatMessage.tsx';
 import { generateKey} from './Chat/Utilities/encryption';
@@ -16,6 +16,7 @@ import { FileManagerModal } from './File_Manager/FileManagerModal';
 import { getHathrAuthToken } from './Chat/Services/auth';
 import { sendChatRequest } from './Chat/Services/chat';
 import type { ChatMessage as APIChatMessage } from './Chat/Utilities/types';
+import { richTextToPlain } from './Chat/Utilities/richTextConversion';
 
 const MAX_CONVERSATION_HISTORY = 5;
 
@@ -42,6 +43,8 @@ function App() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   useEffect(() => {
     const initializeEncryption = async () => {
@@ -63,9 +66,31 @@ function App() {
     initializeAuth();
   }, []);
 
+  const scrollToBottom = useCallback(() => {
+    if (shouldAutoScroll && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [shouldAutoScroll]);
+
+  const handleScroll = useCallback(() => {
+    if (!chatContainerRef.current) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
+    setShouldAutoScroll(isNearBottom);
+  }, []);
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  useEffect(() => {
+    const chatContainer = chatContainerRef.current;
+    if (chatContainer) {
+      chatContainer.addEventListener('scroll', handleScroll);
+      return () => chatContainer.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
 
   const getRecentConversationHistory = (messages: Message[]): APIChatMessage[] => {
     return messages.slice(-MAX_CONVERSATION_HISTORY).map(msg => ({
@@ -105,13 +130,20 @@ function App() {
 
     try {
       const messageHistory = getRecentConversationHistory([...messages, newMessage]);
-      const response = await sendChatRequest(authToken, messageHistory);
+      // Convert rich text to plain text for API
+      const plainTextMessages = messageHistory.map(msg => ({
+        ...msg,
+        text: richTextToPlain(msg.text)
+      }));
+      
+      const response = await sendChatRequest(authToken, plainTextMessages);
 
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: response.data.message,
         timestamp: Date.now(),
+        isNew: true
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -148,6 +180,7 @@ function App() {
         role: 'assistant',
         content: 'Sorry, I encountered an error processing your message. Please try again.',
         timestamp: Date.now(),
+        isNew: true
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -320,7 +353,7 @@ function App() {
     : pinnedChats;
 
   return (
-    <div className={`flex min-h-screen ${isDarkMode ? 'dark bg-gray-900' : 'bg-gray-100'}`}>
+    <div className={`flex h-screen ${isDarkMode ? 'dark bg-gray-900' : 'bg-gray-100'}`}>
       <SavedToClipboardMessagePopup 
         show={showSavedToClipboardMessagePopup} 
         message={SavedToClipboardMessagePopupMessage} 
@@ -351,7 +384,7 @@ function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
       
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col h-screen overflow-hidden">
         <Header
           onDownload={() => setIsDownloadModalOpen(true)}
           onDelete={() => setIsDeleteModalOpen(true)}
@@ -370,68 +403,73 @@ function App() {
           onEditEnd={() => setIsEditingTitle(false)}
         />
         
-        {messages.length === 0 ? (
-          <div className={`flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
-            <div className="relative">
-              <img 
-                src={isDarkMode 
-                  ? "https://43605540.fs1.hubspotusercontent-na1.net/hubfs/43605540/PENTOS/Logos/Web%20Optimized/Emblem%20Only/Pentos%20Emblem%20(White).png" 
-                  : "https://43605540.fs1.hubspotusercontent-na1.net/hubfs/43605540/PENTOS/Logos/Web%20Optimized/Emblem%20Only/Pentos%20Emblem%20(Black).png"} 
-                alt="Pentos Logo" 
-                className="relative h-16 w-16 object-contain"
+        <div className="flex-1 flex flex-col min-h-0">
+          {messages.length === 0 ? (
+            <div className={`flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
+              <div className="relative">
+                <img 
+                  src={isDarkMode 
+                    ? "https://43605540.fs1.hubspotusercontent-na1.net/hubfs/43605540/PENTOS/Logos/Web%20Optimized/Emblem%20Only/Pentos%20Emblem%20(White).png" 
+                    : "https://43605540.fs1.hubspotusercontent-na1.net/hubfs/43605540/PENTOS/Logos/Web%20Optimized/Emblem%20Only/Pentos%20Emblem%20(Black).png"} 
+                  alt="Pentos Logo" 
+                  className="relative h-16 w-16 object-contain"
+                />
+              </div>
+              <h1 className={`text-2xl font-semibold ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                Welcome to Pentos
+              </h1>
+              <div className={`flex items-center gap-2 text-sm ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                <span>End-to-End Encrypted</span>
+              </div>
+            </div>
+          ) : (
+            <div 
+              ref={chatContainerRef}
+              className={`flex-1 overflow-y-auto p-4 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}
+            >
+              <div className="mx-auto max-w-4xl space-y-4">
+                {messages.map((message) => (
+                  <ChatMessage 
+                    key={message.id} 
+                    message={message}
+                    isDarkMode={isDarkMode}
+                    onEdit={(id, newContent) => {
+                      setMessages(prev => prev.map(msg =>
+                        msg.id === id ? { ...msg, content: newContent } : msg
+                      ));
+                    }}
+                    onDelete={(id) => {
+                      setMessages(prev => prev.filter(msg => msg.id !== id));
+                    }}
+                    onCopy={() => {
+                      setSavedToClipboardMessagePopupMessage('Message copied to clipboard');
+                      setShowSavedToClipboardMessagePopup(true);
+                      setTimeout(() => setShowSavedToClipboardMessagePopup(false), 3000);
+                    }}
+                    onSend={handleSendMessage}
+                    onRegenerate={handleRegenerate}
+                  />
+                ))}
+                {isLoading && (
+                  <div className={`flex items-center gap-2 text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                    <div className="animate-pulse">●</div>
+                    <div className="animate-pulse animation-delay-200">●</div>
+                    <div className="animate-pulse animation-delay-400">●</div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+          )}
+
+          <div className={`border-t ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} p-4`}>
+            <div className="mx-auto max-w-4xl">
+              <ChatInput 
+                onSend={handleSendMessage} 
+                disabled={isLoading || !encryptionKey || !authToken}
+                isDarkMode={isDarkMode}
               />
             </div>
-            <h1 className={`text-2xl font-semibold ${isDarkMode ? 'text-white' : 'text-black'}`}>
-              Welcome to Pentos
-            </h1>
-            <div className={`flex items-center gap-2 text-sm ${isDarkMode ? 'text-white' : 'text-black'}`}>
-              <span>End-to-End Encrypted</span>
-            </div>
-          </div>
-        ) : (
-          <div className={`flex-1 overflow-y-auto p-4 ${isDarkMode ? 'bg-gray-900' : 'bg-white'}`}>
-            <div className="mx-auto max-w-4xl space-y-4">
-              {messages.map((message) => (
-                <ChatMessage 
-                  key={message.id} 
-                  message={message}
-                  isDarkMode={isDarkMode}
-                  onEdit={(id, newContent) => {
-                    setMessages(prev => prev.map(msg =>
-                      msg.id === id ? { ...msg, content: newContent } : msg
-                    ));
-                  }}
-                  onDelete={(id) => {
-                    setMessages(prev => prev.filter(msg => msg.id !== id));
-                  }}
-                  onCopy={() => {
-                    setSavedToClipboardMessagePopupMessage('Message copied to clipboard');
-                    setShowSavedToClipboardMessagePopup(true);
-                    setTimeout(() => setShowSavedToClipboardMessagePopup(false), 3000);
-                  }}
-                  onSend={handleSendMessage}
-                  onRegenerate={handleRegenerate}
-                />
-              ))}
-              {isLoading && (
-                <div className={`flex items-center gap-2 text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                  <div className="animate-pulse">●</div>
-                  <div className="animate-pulse animation-delay-200">●</div>
-                  <div className="animate-pulse animation-delay-400">●</div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-        )}
-
-        <div className={`border-t ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'} p-4`}>
-          <div className="mx-auto max-w-4xl">
-            <ChatInput 
-              onSend={handleSendMessage} 
-              disabled={isLoading || !encryptionKey || !authToken}
-              isDarkMode={isDarkMode}
-            />
           </div>
         </div>
       </div>
@@ -454,9 +492,9 @@ function App() {
         onClose={() => setIsAddTimeModalOpen(false)}
         isDarkMode={isDarkMode}
         onConfirm={() => {
-        setExpirationTime(prev => prev + 30 * 60 * 1000);
-        setIsAddTimeModalOpen(false);
-       }}
+          setExpirationTime(prev => prev + 30 * 60 * 1000);
+          setIsAddTimeModalOpen(false);
+        }}
       />
 
       <DownloadModal

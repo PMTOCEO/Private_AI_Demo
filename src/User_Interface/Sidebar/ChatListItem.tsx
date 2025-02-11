@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Pin } from 'lucide-react';
 import { Chat } from '../../Chat/Utilities';
 import { ChatMenu } from './ChatMenu';
+import { richTextToPreview } from '../../Chat/Utilities/richTextConversion';
 
 interface ChatListItemProps {
   chat: Chat;
@@ -31,7 +32,11 @@ export function ChatListItem({
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(chat.title);
 
-  const handleRename = (id: string) => {
+  useEffect(() => {
+    setEditedTitle(chat.title);
+  }, [chat.title]);
+
+  const handleRename = () => {
     setIsEditing(true);
   };
 
@@ -54,6 +59,9 @@ export function ChatListItem({
       setIsEditing(false);
     }
   };
+
+  // Convert rich text to plain text preview
+  const messagePreview = richTextToPreview(chat.lastMessage);
 
   return (
     <div
@@ -89,7 +97,7 @@ export function ChatListItem({
           )}
           {chat.isPinned && <Pin className="h-3 w-3" />}
         </div>
-        <span className="truncate text-xs opacity-60">{chat.lastMessage}</span>
+        <span className="truncate text-xs opacity-60">{messagePreview}</span>
         {chat.tags && chat.tags.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {chat.tags.map(tag => (

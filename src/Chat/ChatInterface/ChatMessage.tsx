@@ -1,16 +1,26 @@
-import { useState, useEffect } from 'react';
-import {
-  User,
-  Pencil,
-  Copy,
-  Trash2,
-  Check,
-  X,
-  Volume2,
-  RefreshCw,
-} from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { User, Pencil, Copy, Trash2, Check, X, Volume2, RefreshCw } from 'lucide-react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import Document from '@tiptap/extension-document';
+import Paragraph from '@tiptap/extension-paragraph';
+import Text from '@tiptap/extension-text';
+import Bold from '@tiptap/extension-bold';
+import Italic from '@tiptap/extension-italic';
+import Underline from '@tiptap/extension-underline';
+import Strike from '@tiptap/extension-strike';
+import BulletList from '@tiptap/extension-bullet-list';
+import OrderedList from '@tiptap/extension-ordered-list';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import ListItem from '@tiptap/extension-list-item';
+import Highlight from '@tiptap/extension-highlight';
+import TextAlign from '@tiptap/extension-text-align';
+import Color from '@tiptap/extension-color';
+import TextStyle from '@tiptap/extension-text-style';
 import { DeleteModal } from '../../User_Interface/Header/DeleteModal';
 import { Message } from '../Utilities';
+import { FormattingOptions } from './FormattingOptions';
+import { richTextToPlain } from '../Utilities/richTextConversion';
 
 interface ChatMessageProps {
   message: Message;
@@ -19,7 +29,7 @@ interface ChatMessageProps {
   onDelete?: (id: string) => void;
   onCopy?: () => void;
   onSend?: (content: string) => void;
-  onRegenerate?: (id: string, content: string) => void;
+  onRegenerate?: (id: string) => void;
 }
 
 export function ChatMessage({
@@ -32,71 +42,128 @@ export function ChatMessage({
   onRegenerate,
 }: ChatMessageProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState(message.content);
   const [showActions, setShowActions] = useState(false);
   const [isReading, setIsReading] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [displayedContent, setDisplayedContent] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const isUser = message.role === 'user';
+  const messageEndRef = useRef<HTMLDivElement>(null);
 
+  const editor = useEditor({
+    extensions: [
+      Document,
+      Paragraph,
+      Text,
+      Bold,
+      Italic,
+      Underline,
+      Strike,
+      BulletList.configure({
+        keepMarks: true,
+        keepAttributes: false,
+      }),
+      OrderedList.configure({
+        keepMarks: true,
+        keepAttributes: false,
+      }),
+      ListItem.configure({
+        HTMLAttributes: {
+          class: 'list-item',
+        },
+      }),
+      TaskList.configure({
+        HTMLAttributes: {
+          class: 'task-list',
+        },
+      }),
+      TaskItem.configure({
+        nested: true,
+        HTMLAttributes: {
+          class: 'task-item',
+        },
+      }),
+      Highlight.configure({ 
+        multicolor: true,
+      }),
+      TextAlign.configure({
+        types: ['paragraph', 'heading'],
+        alignments: ['left', 'center', 'right'],
+      }),
+      TextStyle,
+      Color,
+    ],
+    content: '',
+    editable: false,
+  });
+
+  // Handle editing mode
   useEffect(() => {
-    if (!isUser && message.content) {
-      setIsTyping(true);
-      setDisplayedContent('');
-      
-      let timeoutId: NodeJS.Timeout;
-      
-      // Add a small delay before starting the typing effect
-      timeoutId = setTimeout(() => {
-        const chars = message.content.split('');
-        let currentIndex = 0;
-        let content = '';
+    if (isEditing && editor) {
+      try {
+        const parsed = JSON.parse(message.content);
+        editor.commands.setContent(parsed.html);
+      } catch {
+        editor.commands.setContent(message.content);
+      }
+      editor.setEditable(true);
+    }
+  }, [isEditing, editor, message.content]);
 
-        const typingInterval = setInterval(() => {
-          if (currentIndex < chars.length) {
-            content += chars[currentIndex];
-            setDisplayedContent(content);
-            currentIndex++;
-          } else {
-            clearInterval(typingInterval);
-            setIsTyping(false);
+  // Initialize content and handle typewriter effect
+  useEffect(() => {
+    if (isUser || !message.isNew) {
+      try {
+        const parsed = JSON.parse(message.content);
+        setDisplayedContent(parsed.html);
+      } catch {
+        setDisplayedContent(message.content);
+      }
+      return;
+    }
+
+    // For new assistant messages, play typewriter effect
+    setIsTyping(true);
+    setDisplayedContent('');
+
+    try {
+      const content = JSON.parse(message.content).html;
+      let currentText = '';
+      let currentIndex = 0;
+
+      const typingInterval = setInterval(() => {
+        if (currentIndex < content.length) {
+          currentText += content[currentIndex];
+          setDisplayedContent(currentText);
+          currentIndex++;
+
+          // Scroll to bottom while typing
+          if (messageEndRef.current) {
+            messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
           }
-        }, 5);
-
-        return () => {
+        } else {
           clearInterval(typingInterval);
-          clearTimeout(timeoutId);
-        };
-      }, 100); // Small delay before starting
+          setIsTyping(false);
+          message.isNew = false;
+        }
+      }, 5); // AI response typing speed
 
-      return () => clearTimeout(timeoutId);
-    } else {
+      return () => clearInterval(typingInterval);
+    } catch {
       setDisplayedContent(message.content);
       setIsTyping(false);
+      message.isNew = false;
     }
-  }, [message.content, isUser]);
-
-  const handleEdit = () => {
-    if (onSend) {
-      onSend(editedContent);
-      setIsEditing(false);
-    }
-  };
+  }, [message, isUser]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
+    const plainText = richTextToPlain(message.content);
+    navigator.clipboard.writeText(plainText);
     if (onCopy) onCopy();
   };
 
   const handleDelete = () => {
     setIsDeleteModalOpen(true);
-  };
-
-  const handleRegenerate = () => {
-    if (onRegenerate) {
-      onRegenerate(message.id, message.content);
-    }
   };
 
   const handleReadAloud = () => {
@@ -106,10 +173,33 @@ export function ChatMessage({
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(message.content);
+    const plainText = richTextToPlain(message.content);
+    const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.onend = () => setIsReading(false);
     setIsReading(true);
     window.speechSynthesis.speak(utterance);
+  };
+
+  const handleRegenerate = () => {
+    if (onRegenerate) {
+      onRegenerate(message.id);
+    }
+  };
+
+  const handleSaveEdit = () => {
+    if (editor && onEdit) {
+      const htmlContent = editor.getHTML();
+      const plainText = editor.getText();
+      
+      if (plainText.trim()) {
+        onEdit(message.id, JSON.stringify({
+          html: htmlContent,
+          text: plainText.trim()
+        }));
+      }
+      setIsEditing(false);
+      editor.setEditable(false);
+    }
   };
 
   return (
@@ -147,7 +237,7 @@ export function ChatMessage({
       </div>
 
       <div
-        className={`relative inline-block max-w-[calc(80%-2rem)] rounded-lg px-2 py-2 transition-all duration-300 ${
+        className={`relative inline-block max-w-[calc(80%-2rem)] rounded-lg px-4 py-2 transition-all duration-300 ${
           isUser
             ? `${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'} ${
                 isDarkMode ? 'text-gray-100' : 'text-gray-900'
@@ -157,20 +247,19 @@ export function ChatMessage({
       >
         {isEditing ? (
           <div className="flex w-full flex-col gap-2">
-            <textarea
-              value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
-              className={`min-h-[150px] w-full rounded-lg border p-2 ${
-                isDarkMode
-                  ? 'border-gray-700 bg-gray-900 text-white'
-                  : 'border-gray-300 bg-gray-100 text-gray-900'
-              } focus:outline-none`}
-            />
+            <FormattingOptions editor={editor} isDarkMode={isDarkMode} />
+            <div className={`rounded-lg border ${
+              isDarkMode 
+                ? 'border-gray-600' 
+                : 'border-gray-300'
+            }`}>
+              <EditorContent editor={editor} />
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => {
-                  setEditedContent(message.content);
                   setIsEditing(false);
+                  editor?.setEditable(false);
                 }}
                 className={`flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-white transition-all duration-100 hover:border-1 hover:border-white ${
                   isDarkMode
@@ -182,7 +271,7 @@ export function ChatMessage({
                 Cancel
               </button>
               <button
-                onClick={handleEdit}
+                onClick={handleSaveEdit}
                 className={`flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-white transition-all duration-100 hover:border-1 hover:border-white ${
                   isDarkMode
                     ? 'bg-gray-800 hover:bg-gray-900'
@@ -196,23 +285,18 @@ export function ChatMessage({
           </div>
         ) : (
           <>
-            <p className="whitespace-pre-wrap break-words">
-              {displayedContent}
-              {isTyping && (
-                <span className="inline-flex animate-pulse">▊</span>
-              )}
-            </p>
-            {showActions && (
+            <div 
+              className="prose prose-sm dark:prose-invert max-w-none"
+              dangerouslySetInnerHTML={{ __html: displayedContent }}
+            />
+            {showActions && !isTyping && (
               <div
                 className={`absolute ${
                   isUser ? 'right-full' : 'left-full'
                 } top-1/2 flex -translate-y-1/2 gap-1 px-2`}
               >
                 <button
-                  onClick={() => {
-                    setEditedContent(message.content);
-                    setIsEditing(true);
-                  }}
+                  onClick={() => setIsEditing(true)}
                   className={`rounded-full p-1 transition-colors ${
                     isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-300'
                   }`}
@@ -277,6 +361,7 @@ export function ChatMessage({
                 )}
               </div>
             )}
+            <div ref={messageEndRef} />
           </>
         )}
       </div>
